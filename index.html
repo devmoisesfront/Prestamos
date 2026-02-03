@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mis prestamos</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Bootstrap -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<!-- Icons -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+
+<!-- Font -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+<!-- SweetAlert -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<!-- jsPDF -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+body{
+    font-family:'Inter',sans-serif;
+    background:linear-gradient(135deg,#0d6efd,#062b6f);
+    min-height:100vh;
+}
+.card{border-radius:20px;}
+.money{font-weight:600;}
+.option-card{
+    cursor:pointer;
+    transition:.2s;
+}
+.option-card:hover{
+    transform:scale(1.03);
+    box-shadow:0 10px 20px rgba(0,0,0,.15);
+}
+</style>
+</head>
+
+<body>
+<div class="container py-4">
+<div class="row justify-content-center">
+<div class="col-lg-8">
+
+<div class="card shadow-lg p-4">
+<h3 class="text-center mb-3">
+<i class="bi bi-cash-coin"></i> mis prestamos
+</h3>
+
+<!-- MONTO -->
+<label class="fw-semibold">Monto a prestar</label>
+<input type="text" id="monto" class="form-control mb-3" placeholder="0">
+
+<!-- INTERÉS -->
+<div class="row g-2 mb-4">
+<div class="col-6">
+<button class="btn btn-outline-primary w-100" onclick="setInteres(0.10)">10%</button>
+</div>
+<div class="col-6">
+<button class="btn btn-outline-danger w-100" onclick="setInteres(0.20)">20%</button>
+</div>
+</div>
+
+<!-- OPCIONES -->
+<div id="opciones" class="row g-3 d-none"></div>
+
+<!-- TABLA -->
+<div id="tablaWrap" class="d-none mt-4">
+<div class="table-responsive">
+<table class="table table-bordered text-center align-middle">
+<thead class="table-light">
+<tr>
+<th>Cuota</th>
+<th>Capital</th>
+<th>Interés</th>
+<th>Total</th>
+</tr>
+</thead>
+<tbody id="tabla"></tbody>
+</table>
+</div>
+
+<button class="btn btn-success w-100 mt-3" onclick="exportarPDF()">
+<i class="bi bi-file-earmark-pdf"></i> Exportar a PDF
+</button>
+</div>
+
+</div>
+</div>
+</div>
+</div>
+
+<script>
+let tasaSeleccionada=0;
+let montoReal=0;
+let cuotasSeleccionadas=0;
+
+const cuotas=[2,4,6,8,10,12,16];
+
+const formato=valor=>valor.toLocaleString('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0});
+
+document.getElementById('monto').addEventListener('input',e=>{
+let val=e.target.value.replace(/\D/g,'');
+montoReal=parseFloat(val||0);
+e.target.value=montoReal.toLocaleString('es-CO');
+});
+
+function setInteres(tasa){
+if(!montoReal){
+Swal.fire("Error","Ingrese un monto","error");
+return;
+}
+tasaSeleccionada=tasa;
+mostrarOpciones();
+}
+
+function mostrarOpciones(){
+const cont=document.getElementById("opciones");
+cont.innerHTML="";
+cuotas.forEach(c=>{
+cont.innerHTML+=`
+<div class="col-md-4">
+<div class="card option-card p-3 text-center" onclick="generarTabla(${c})">
+<h5>${c} Cuotas</h5>
+<p class="mb-1">Interés fijo</p>
+<span class="badge bg-success">${tasaSeleccionada*100}%</span>
+</div>
+</div>`;
+});
+cont.classList.remove("d-none");
+}
+
+function generarTabla(n){
+cuotasSeleccionadas=n;
+const tbody=document.getElementById("tabla");
+tbody.innerHTML="";
+
+const interesCuota=montoReal*tasaSeleccionada;
+const capitalCuota=montoReal/n;
+const totalCuota=capitalCuota+interesCuota;
+
+for(let i=1;i<=n;i++){
+tbody.innerHTML+=`
+<tr>
+<td>${i}/${n}</td>
+<td class="money">${formato(capitalCuota)}</td>
+<td class="text-danger fw-semibold">${formato(interesCuota)}</td>
+<td class="fw-bold">${formato(totalCuota)}</td>
+</tr>`;
+}
+
+document.getElementById("tablaWrap").classList.remove("d-none");
+}
+
+function exportarPDF(){
+const {jsPDF}=window.jspdf;
+const doc=new jsPDF();
+doc.text("Proyección de Préstamo",14,15);
+doc.autoTable({
+startY:20,
+html:'table'
+});
+doc.save("prestamo.pdf");
+}
+</script>
+</body>
+</html>
