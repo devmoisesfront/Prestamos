@@ -2,13 +2,11 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Mis prestamos</title>
+<title>Mis Préstamos</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <!-- Bootstrap -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
-<!-- Icons -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
 
 <!-- Font -->
@@ -21,21 +19,34 @@
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.29/dist/jspdf.plugin.autotable.min.js"></script>
 
+<!-- Excel -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<!-- PNG -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
 <style>
 body{
-    font-family:'Inter',sans-serif;
-    background:linear-gradient(135deg,#0d6efd,#062b6f);
-    min-height:100vh;
+  font-family:'Inter',sans-serif;
+  background:linear-gradient(135deg,#0d6efd,#062b6f);
+  min-height:100vh;
 }
 .card{border-radius:20px;}
-.money{font-weight:600;}
 .option-card{
-    cursor:pointer;
-    transition:.2s;
+  cursor:pointer;
+  transition:.25s;
 }
 .option-card:hover{
-    transform:scale(1.03);
-    box-shadow:0 10px 20px rgba(0,0,0,.15);
+  transform:translateY(-6px);
+  box-shadow:0 12px 25px rgba(0,0,0,.2);
+}
+tfoot td{
+  font-weight:700;
+  background:#f8f9fa;
+}
+.botones-flotantes button{
+  margin:8px;
+  box-shadow:0 8px 18px rgba(0,0,0,.25);
 }
 </style>
 </head>
@@ -43,49 +54,58 @@ body{
 <body>
 <div class="container py-4">
 <div class="row justify-content-center">
-<div class="col-lg-8">
+<div class="col-lg-11">
 
-<div class="card shadow-lg p-4">
+<div class="card shadow-lg p-4" id="prestamoCard">
 <h3 class="text-center mb-3">
-<i class="bi bi-cash-coin"></i> mis prestamos
+<i class="bi bi-cash-coin"></i> Mis Préstamos
 </h3>
 
-<!-- MONTO -->
-<label class="fw-semibold">Monto a prestar</label>
-<input type="text" id="monto" class="form-control mb-3" placeholder="0">
+<label>Monto a prestar</label>
+<input type="text" id="monto" class="form-control mb-3">
 
-<!-- INTERÉS -->
-<div class="row g-2 mb-4">
-<div class="col-6">
-<button class="btn btn-outline-primary w-100" onclick="setInteres(0.10)">10%</button>
-</div>
-<div class="col-6">
-<button class="btn btn-outline-danger w-100" onclick="setInteres(0.20)">20%</button>
-</div>
-</div>
+<label>Tasa de interés mensual (%)</label>
+<input type="number" id="tasaInput" class="form-control mb-3" placeholder="Ej: 10">
 
-<!-- OPCIONES -->
-<div id="opciones" class="row g-3 d-none"></div>
+<label>Frecuencia de pago</label>
+<select id="frecuencia" class="form-select mb-4">
+  <option value="">Seleccione</option>
+  <option value="diario">Diario</option>
+  <option value="semanal">Semanal</option>
+  <option value="quincenal">Quincenal</option>
+  <option value="mensual">Mensual</option>
+</select>
 
-<!-- TABLA -->
+<div id="opciones" class="row g-4 d-none"></div>
+
 <div id="tablaWrap" class="d-none mt-4">
-<div class="table-responsive">
 <table class="table table-bordered text-center align-middle">
 <thead class="table-light">
 <tr>
 <th>Cuota</th>
+<th>Fecha de pago</th>
 <th>Capital</th>
 <th>Interés</th>
 <th>Total</th>
 </tr>
 </thead>
 <tbody id="tabla"></tbody>
+<tfoot>
+<tr>
+<td colspan="2">TOTALES</td>
+<td id="totalCapital"></td>
+<td id="totalInteres"></td>
+<td id="totalGeneral"></td>
+</tr>
+</tfoot>
 </table>
-</div>
 
-<button class="btn btn-success w-100 mt-3" onclick="exportarPDF()">
-<i class="bi bi-file-earmark-pdf"></i> Exportar a PDF
-</button>
+<div class="botones-flotantes text-center mt-4">
+<button class="btn btn-success" onclick="exportPDF()">PDF</button>
+<button class="btn btn-primary" onclick="exportExcel()">Excel</button>
+<button class="btn btn-warning" onclick="exportPNG()">PNG</button>
+<button class="btn btn-dark" onclick="nuevoCliente()">Nuevo cliente</button>
+</div>
 </div>
 
 </div>
@@ -94,76 +114,104 @@ body{
 </div>
 
 <script>
-let tasaSeleccionada=0;
-let montoReal=0;
-let cuotasSeleccionadas=0;
+let montoReal=0, tasaMensual=0;
+const cuotas=[6,8,10,12,16,20,24,30];
+const diasFrecuencia={
+  diario:1,
+  semanal:7,
+  quincenal:15,
+  mensual:30
+};
 
-const cuotas=[2,4,6,8,10,12,16];
+const formato=v=>v.toLocaleString('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0});
+const formatoFecha=f=>f.toLocaleDateString('es-CO');
 
-const formato=valor=>valor.toLocaleString('es-CO',{style:'currency',currency:'COP',minimumFractionDigits:0});
-
-document.getElementById('monto').addEventListener('input',e=>{
-let val=e.target.value.replace(/\D/g,'');
-montoReal=parseFloat(val||0);
-e.target.value=montoReal.toLocaleString('es-CO');
+monto.addEventListener("input",e=>{
+  montoReal=parseInt(e.target.value.replace(/\D/g,''))||0;
+  e.target.value=montoReal.toLocaleString("es-CO");
 });
 
-function setInteres(tasa){
-if(!montoReal){
-Swal.fire("Error","Ingrese un monto","error");
-return;
-}
-tasaSeleccionada=tasa;
-mostrarOpciones();
-}
+tasaInput.addEventListener("input",mostrarOpciones);
+frecuencia.addEventListener("change",mostrarOpciones);
 
 function mostrarOpciones(){
-const cont=document.getElementById("opciones");
-cont.innerHTML="";
-cuotas.forEach(c=>{
-cont.innerHTML+=`
-<div class="col-md-4">
-<div class="card option-card p-3 text-center" onclick="generarTabla(${c})">
-<h5>${c} Cuotas</h5>
-<p class="mb-1">Interés fijo</p>
-<span class="badge bg-success">${tasaSeleccionada*100}%</span>
-</div>
-</div>`;
-});
-cont.classList.remove("d-none");
+  tasaMensual=(parseFloat(tasaInput.value)||0)/100;
+  if(!montoReal || !tasaMensual || !frecuencia.value) return;
+
+  opciones.innerHTML="";
+  cuotas.forEach(c=>{
+    opciones.innerHTML+=`
+    <div class="col-md-3">
+      <div class="card option-card p-3 text-center" onclick="generarTabla(${c})">
+        <strong>${c} cuotas</strong><br>${frecuencia.value}
+      </div>
+    </div>`;
+  });
+  opciones.classList.remove("d-none");
 }
 
 function generarTabla(n){
-cuotasSeleccionadas=n;
-const tbody=document.getElementById("tabla");
-tbody.innerHTML="";
+  const meses=(n*diasFrecuencia[frecuencia.value])/30;
+  const interesTotal=montoReal*tasaMensual*meses;
+  const totalPagar=montoReal+interesTotal;
 
-const interesCuota=montoReal*tasaSeleccionada;
-const capitalCuota=montoReal/n;
-const totalCuota=capitalCuota+interesCuota;
+  const capCuota=montoReal/n;
+  const intCuota=interesTotal/n;
+  const totCuota=totalPagar/n;
 
-for(let i=1;i<=n;i++){
-tbody.innerHTML+=`
-<tr>
-<td>${i}/${n}</td>
-<td class="money">${formato(capitalCuota)}</td>
-<td class="text-danger fw-semibold">${formato(interesCuota)}</td>
-<td class="fw-bold">${formato(totalCuota)}</td>
-</tr>`;
+  tabla.innerHTML="";
+  let fecha=new Date();
+
+  for(let i=1;i<=n;i++){
+    fecha = sumarDias(fecha, diasFrecuencia[frecuencia.value]);
+    tabla.innerHTML+=`
+    <tr>
+      <td>${i}/${n}</td>
+      <td>${formatoFecha(fecha)}</td>
+      <td>${formato(capCuota)}</td>
+      <td>${formato(intCuota)}</td>
+      <td>${formato(totCuota)}</td>
+    </tr>`;
+  }
+
+  totalCapital.innerText=formato(montoReal);
+  totalInteres.innerText=formato(interesTotal);
+  totalGeneral.innerText=formato(totalPagar);
+
+  tablaWrap.classList.remove("d-none");
 }
 
-document.getElementById("tablaWrap").classList.remove("d-none");
+// Función para sumar días según la frecuencia
+function sumarDias(fecha, dias){
+  const nueva = new Date(fecha);
+  nueva.setDate(nueva.getDate() + dias);
+  return nueva;
 }
 
-function exportarPDF(){
-const {jsPDF}=window.jspdf;
-const doc=new jsPDF();
-doc.text("Proyección de Préstamo",14,15);
-doc.autoTable({
-startY:20,
-html:'table'
-});
-doc.save("prestamo.pdf");
+function nuevoCliente(){
+  location.reload();
+}
+
+function exportPDF(){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF();
+  doc.text("Proyección de Préstamo",14,15);
+  doc.autoTable({html:"table",startY:20});
+  doc.save("prestamo.pdf");
+}
+
+function exportExcel(){
+  const wb=XLSX.utils.table_to_book(document.querySelector("table"));
+  XLSX.writeFile(wb,"prestamo.xlsx");
+}
+
+function exportPNG(){
+  html2canvas(prestamoCard).then(canvas=>{
+    const a=document.createElement("a");
+    a.href=canvas.toDataURL();
+    a.download="prestamo.png";
+    a.click();
+  });
 }
 </script>
 </body>
